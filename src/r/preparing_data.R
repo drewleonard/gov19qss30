@@ -3,10 +3,15 @@ setwd('~/Desktop/19W/qss_30/project/')
 
 library(tidyverse)
 
+# Read in four data-sets
+controls <- read_csv('./data/controls_cleaner.csv')
 ucr <- read_csv('./data/ucr_merged_clean.csv')
 disp <- read_csv('./data/disp_merged_states_clean_all.csv')
 fe <- read_csv('./data/fatal_encounters_clean.csv')
-controls <- read_csv('./data/controls_cleaner.csv')
+
+# Controls
+controls <- controls %>%
+  mutate(population_black = prop_black * population)
 
 # Violent crime by county and year
 ucr_flat <- ucr %>%
@@ -22,13 +27,16 @@ disp_flat <- disp %>%
   filter(county_long != "Unavailable" &
            county_short != "Unavailable") %>%
   rename(state = State) %>%
-  mutate(year = as.numeric(substring(`Ship Date`, 1, 4))) %>%
-  group_by(county_long, state, year, group_small) %>%
-  summarize(
-    expenditure_value = sum(`Acquisition Value`),
-    expenditure_value_logged = log(sum(`Acquisition Value`)),
-    expenditure_quantity = sum(Quantity)
-  )
+  mutate(
+    year = as.numeric(substring(`Ship Date`, 1, 4)),
+    cost = `Acquisition Value`,
+    controlled = ifelse(group_small == "Weapons" | group_small == "Vehicular", "controlled", "noncontrolled")
+  ) %>%
+  group_by(county_long, state, year, controlled) %>%
+  summarize(cost_total_logged = log(sum(cost))) %>%
+  spread(controlled, cost_total_logged) %>% 
+  mutate(controlled = ifelse(is.na(controlled), 0, controlled),
+         noncontrolled = ifelse(is.na(noncontrolled), 0, noncontrolled))
 
 # Civilian killings by county and year
 fe_flat <- fe %>%
@@ -51,38 +59,28 @@ merged <-
 # Use all control counties ...
 # and assume that some have no fatal encounters
 merged <-
-  merge(
-    merged,
-    fe_flat,
-    by = c("year", "state", "county_long"),
-    all.x = TRUE
-  )
+  merge(merged,
+        fe_flat,
+        by = c("year", "state", "county_long"),
+        all.x = TRUE)
 
 # Add expenditures
 # Assume that some counties have no expenditures
 merged <-
-  merge(
-    merged,
-    disp_flat,
-    by = c("year", "state", "county_long"),
-    all.x = TRUE
-  )
+  merge(merged,
+        disp_flat,
+        by = c("year", "state", "county_long"),
+        all.x = TRUE)
 
 # Give zero values to county's without expenditures and fatalities
+# I do this because some county--year observations do not have either
+# expenditures or fatalities (which is natural)
 merged <- merged %>%
   mutate(
     fatalities = ifelse(is.na(fatalities), 0, fatalities),
-    group_small = ifelse(is.na(group_small), "Unavailable", group_small),
-    expenditure_value = ifelse(is.na(expenditure_value), 0, expenditure_value),
-    expenditure_value_logged = ifelse(is.na(expenditure_value_logged), 0, expenditure_value_logged),
-    expenditure_quantity = ifelse(is.na(expenditure_quantity), 0, expenditure_quantity)
-  )
-
-# Add variable for black population
-merged <- merged %>%
-  rowwise() %>% 
-  mutate(
-    population_black = prop_black * population
+    controlled = ifelse(is.na(controlled), 0, controlled),
+    noncontrolled = ifelse(is.na(noncontrolled), 0, noncontrolled),
+    total = controlled + noncontrolled
   )
 
 write.csv(merged, './data/analysis_ready.csv')

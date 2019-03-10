@@ -6,88 +6,51 @@ library(jtools)
 library(MASS)
 library(stargazer)
 library(cowplot)
+library(interactions)
 
+# Read in merged data-set  (all four, cleaned)
 merged <- read_csv('./data/analysis_ready.csv')
 
-# Get data for controlled items only
-merged_controlled <- merged %>%
-  filter(group_small != "Unavailable") %>%
-  mutate(controlled = ifelse(group_small == "Office", "Uncontrolled", "Controlled"))
+# Baseline Delehanty et al. (2017) models
 
-# Regressing
-# Baseline Delehanty et al. (2017) model
-# OLS
-fitt1 <- lm(
-  fatalities ~ expenditure_value_logged + violent_crime + median_income_household + population + population_black,
+# Controlled spending, controlling for noncontrolled spending
+fit1 <- MASS::glm.nb(
+  fatalities ~ controlled + noncontrolled + violent_crime + median_income_household + population_black + population,
   data = merged
 )
-summary(fitt1)
-effect_plot(
-  fitt1,
-  pred = expenditure_value_logged,
+summary(fit1)
+ep1 <- effect_plot(
+  fit1,
+  pred = controlled,
   interval = TRUE,
-  x.label = "Expenditure Value (logged)",
+  x.label = "Controlled Spending",
   y.label = "Fatalities"
 )
 
-# Baseline Delehanty et al. (2017) model
-# Negative binomial regression
-fitt2 <- MASS::glm.nb(
-  fatalities ~ expenditure_value_logged + violent_crime + median_income_household + population_black + population,
+# Total
+fit2 <- MASS::glm.nb(
+  fatalities ~ total + violent_crime + median_income_household + population_black + population,
   data = merged
 )
-summary(fitt2)
-effect_plot(
-  fitt2,
-  pred = expenditure_value_logged,
-  interval = TRUE,
-  x.label = "Expenditure Value (logged)",
-  y.label = "Fatalities"
-)
-
-# Basline
-# Controlled only, ols
-fitt3 <- lm(
-  fatalities ~ expenditure_value_logged + violent_crime + median_income_household + population_black + population,
-  data = merged_controlled
-)
-summary(fitt3)
-effect_plot(
-  fitt3,
-  pred = expenditure_value_logged,
-  interval = TRUE,
-  x.label = "Expenditure Value (logged)",
-  y.label = "Fatalities"
-)
-
-# Basline
-# Controlled only, nbr
-fitt4 <- MASS::glm.nb(
-  fatalities ~ expenditure_value_logged + violent_crime + median_income_household + population_black + population,
-  data = merged_controlled
-)
-summary(fitt4)
-effect_plot(
-  fitt4,
-  pred = expenditure_value_logged,
-  interval = TRUE,
-  x.label = "Expenditure Value (logged)",
-  y.label = "Fatalities"
-)
-
-# Two-way anova shows that controlled and not-controlled do not matter
-fitt5 <- aov(
-  fatalities ~ expenditure_value_logged * controlled + violent_crime + median_income_household + population_black + population,
-  data = merged_controlled
-)
-summary(fitt5)
+summary(fit2)
 
 # Plotting and exporting models
 coef_names <- c(
-  "Expenditures (logged)" = "expenditure_value_logged",
-  "Violent crime" = "violent_crime",
-  "Median income" = "median_income_household",
-  "Population black" = "population_black"
+  "Expenditures (Controlled)" = "controlled",
+  "Expenditures (Non-Controlled)" = "noncontrolled",
+  "Expenditures (Total)" = "total",
+  "Violent Crime" = "violent_crime",
+  "Median Income" = "median_income_household",
+  "Population Black" = "population_black"
 )
-plot_summs(fitt1, fitt2, fitt4, scale = TRUE, transform.response = TRUE, coefs = coef_names, ci_level = 0.90)
-# export_summs(fitt1, fitt2, fitt4, scale = TRUE, coefs = coef_names, ci_level = 0.90)
+plot_summs(fit1, fit2, scale = TRUE, coefs = coef_names, ci_level = 0.90)
+
+# Pearson's R correlation between controlled and non-controlled items
+cor(merged$controlled, merged$noncontrolled, method = "pearson")
+
+# Interaction plot
+fit3 <- MASS::glm.nb(
+  fatalities ~ controlled * noncontrolled + violent_crime + median_income_household + population_black + population,
+  data = merged
+)
+interact_plot(fit3, pred = controlled, modx = noncontrolled, interval = TRUE)

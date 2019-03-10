@@ -15,8 +15,15 @@ controls <- read_csv('./data/controls_cleaner.csv')
 merged <- read_csv('./data/analysis_ready.csv')
 
 # Fatal encounters for descriptive stats
-fe_descriptive <- fe %>% 
-  dplyr::select(`Subject's gender`, `Subject's race`, `Subject's age`, `Date (Year)`, `Cause of death`, `Location of death (zip code)`) %>% 
+fe_descriptive <- fe %>%
+  dplyr::select(
+    `Subject's gender`,
+    `Subject's race`,
+    `Subject's age`,
+    `Date (Year)`,
+    `Cause of death`,
+    `Location of death (zip code)`
+  ) %>%
   na.omit()
 stargazer(fe_descriptive)
 
@@ -68,7 +75,8 @@ fe %>%
 fe %>%
   rename(Cause = `Cause of death`,
          year = `Date (Year)`) %>%
-  filter(Cause == "Gunshot" | Cause == "Vehicle" | Cause == "Tasered") %>% 
+  filter(Cause == "Gunshot" |
+           Cause == "Vehicle" | Cause == "Tasered") %>%
   group_by(cause, year) %>%
   summarize(deaths = n()) %>%
   ggplot(., aes(x = year, y = deaths, linetype = Cause)) +
@@ -82,7 +90,7 @@ fe %>%
 # Fatal encounters
 # Deaths over time by cause, counts
 fe %>%
-rename(Cause = `Cause of death`) %>%
+  rename(Cause = `Cause of death`) %>%
   group_by(Cause) %>%
   summarize(Deaths = n()) %>%
   ungroup() %>%
@@ -102,15 +110,60 @@ rename(Cause = `Cause of death`) %>%
 #   ) %>%
 #   group_by(Race, Cause, Year) %>%
 #   summarize(Deaths = n()) %>%
-#   ungroup() %>% 
+#   ungroup() %>%
 #   ggplot(., aes(x = Year, y = Deaths)) +
 #   geom_bar(stat = "identity") +
 #   facet_wrap(. ~ Race, nrow = 1)
-  
 
 # DISP
-# merged %>%
-#   filter(group_small != "Unavailable") %>%
-#   mutate(Controlled = ifelse(group_small == "Weapons" | group_small == "Vehicular", "Controlled", "Non-Controlled")) %>%
-#   ggplot(., aes(x = year, y = expenditure_quantity, fill = Controlled)) +
-#   geom_bar(stat = 'identity', position = "dodge")
+disp %>%
+  filter(group_small != "Unavailable") %>%
+  mutate(Year = as.numeric(substring(`Ship Date`, 1, 4))) %>%
+  group_by(Year, group_small) %>%
+  summarize(expenditure_value = sum(`Acquisition Value`)) %>%
+  ggplot(., aes(x = Year, y = expenditure_value, color = group_small)) +
+  scale_x_continuous(limits = c(1990, 2018),
+                     breaks = seq(1990, 2018, 2)) +
+  geom_line(size = 1)
+
+disp %>%
+  filter(group_small != "Unavailable") %>%
+  na.omit() %>%
+  group_by(group_small) %>%
+  summarize(
+    `Expenditure ($US)` = sum(`Acquisition Value`),
+    Quantity = sum(Quantity)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    `Expenditure (%)` = 100 * round(`Expenditure ($US)` / sum(`Expenditure ($US)`), 3),
+    `Quantity (%)` = 100 * round(Quantity / sum(Quantity), 3)
+  ) %>%
+  arrange(desc(`Expenditure ($US)`)) %>%
+  kable()
+
+# Crime rates
+ucr %>%
+  group_by(year) %>%
+  na.omit() %>%
+  summarise(violent_crime = sum(violent_crime)) %>%
+  ggplot(., aes(x = year, y = violent_crime, group = 1)) +
+  geom_line(size = 1) +
+  labs(y = "Violent Crimes", x = "Year")
+
+# Crime rates table
+ucr %>%
+  group_by(year) %>%
+  na.omit() %>%
+  summarise(violent_crime = sum(violent_crime)) %>%
+  ungroup() %>% 
+  arrange(year) %>%
+  mutate(
+    violent_crime_lag = lag(violent_crime),
+    violent_crime_change = 100.0 * round((violent_crime - violent_crime_lag) / violent_crime, 3)
+  ) %>% 
+  dplyr::select(year, violent_crime, violent_crime_change) %>% 
+  rename(Year = year, 
+         `Violent Crime` = violent_crime, 
+         `Violent Crime (% Change)` = violent_crime_change) %>% 
+  kable()
