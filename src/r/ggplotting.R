@@ -14,22 +14,10 @@ fe <- read_csv('./data/fatal_encounters_clean.csv')
 controls <- read_csv('./data/controls_cleaner.csv')
 merged <- read_csv('./data/analysis_ready.csv')
 
-# Fatal encounters for descriptive stats
-fe_descriptive <- fe %>%
-  dplyr::select(
-    `Subject's gender`,
-    `Subject's race`,
-    `Subject's age`,
-    `Date (Year)`,
-    `Cause of death`,
-    `Location of death (zip code)`
-  ) %>%
-  na.omit()
-stargazer(fe_descriptive)
-
 # Fatal encounters
 # Deaths over time by race, counts
 # Top 3 race-counts only
+pdf('./writing/figures/fe_race_timeseries.pdf')
 fe %>%
   rename(race = `Subject's race`,
          year = `Date (Year)`) %>%
@@ -37,6 +25,11 @@ fe %>%
     race == "African-American/Black" |
       race == "European-American/White" | race == "Hispanic/Latino"
   ) %>%
+  mutate(race = ifelse(
+    race == "African-American/Black",
+    "Black",
+    ifelse(race == "European-American/White", "White", "Hispanic")
+  )) %>%
   group_by(race, year) %>%
   summarize(deaths = n()) %>%
   ggplot(., aes(x = year, y = deaths, linetype = race)) +
@@ -45,7 +38,24 @@ fe %>%
                      breaks = seq(2000, 2020, 2)) +
   scale_y_continuous(limits = c(0, 800),
                      breaks = seq(0, 800, 100)) +
-  labs(y = "Fatalities", x = "Year")
+  labs(y = "Police Killings", x = "\nYear") +
+  scale_linetype_manual(
+    name = "Race",
+    guide = guide_legend(direction = "horizontal",
+                         title.position = "top"),
+    breaks = c("White", "Black", "Hispanic"),
+    values = c("longdash", "dotted", "solid")
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    legend.key.width = unit(1.5, "cm"),
+    legend.position = "bottom",
+    legend.title.align = 0.5,
+    legend.justification = "center",
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black")
+  )
+dev.off()
 
 # Fatal encounters
 # Table
@@ -67,103 +77,83 @@ fe %>%
   ungroup() %>%
   mutate(`% of Total` = 100.0 * round(Deaths / sum(Deaths), 3)) %>%
   arrange(desc(Deaths)) %>%
-  kable()
-
-# Fatal encounters
-# Deaths over time by cause, counts
-# Top 3 causes only
-fe %>%
-  rename(Cause = `Cause of death`,
-         year = `Date (Year)`) %>%
-  filter(Cause == "Gunshot" |
-           Cause == "Vehicle" | Cause == "Tasered") %>%
-  group_by(cause, year) %>%
-  summarize(deaths = n()) %>%
-  ggplot(., aes(x = year, y = deaths, linetype = Cause)) +
-  geom_line(size = 1) +
-  scale_x_continuous(limits = c(2000, 2019),
-                     breaks = seq(2000, 2020, 2)) +
-  scale_y_continuous(limits = c(0, 1400),
-                     breaks = seq(0, 1400, 200)) +
-  labs(y = "Fatalities", x = "Year")
-
-# Fatal encounters
-# Deaths over time by cause, counts
-fe %>%
-  rename(Cause = `Cause of death`) %>%
-  group_by(Cause) %>%
-  summarize(Deaths = n()) %>%
-  ungroup() %>%
-  mutate(`% of Total` = 100.0 * round(Deaths / sum(Deaths), 3)) %>%
-  arrange(desc(Deaths)) %>%
-  kable()
-
-# fe %>%
-#   rename(Race = `Subject's race`,
-#          Cause = `Cause of death`,
-#          Year = `Date (Year)`) %>%
-#   filter(Cause == "Gunshot" | Cause == "Vehicle" | Cause == "Tasered") %>%
-#   filter(
-#     Race == "African-American/Black" |
-#       Race == "European-American/White" |
-#       Race == "Hispanic/Latino"
-#   ) %>%
-#   group_by(Race, Cause, Year) %>%
-#   summarize(Deaths = n()) %>%
-#   ungroup() %>%
-#   ggplot(., aes(x = Year, y = Deaths)) +
-#   geom_bar(stat = "identity") +
-#   facet_wrap(. ~ Race, nrow = 1)
+  kable("latex", booktabs = T)
 
 # DISP
+pdf('./writing/figures/leso_timeseries.pdf')
 disp %>%
   filter(group_small != "Unavailable") %>%
-  mutate(Year = as.numeric(substring(`Ship Date`, 1, 4))) %>%
-  group_by(Year, group_small) %>%
-  summarize(expenditure_value = sum(`Acquisition Value`)) %>%
-  ggplot(., aes(x = Year, y = expenditure_value, color = group_small)) +
+  mutate(Controlled = ifelse(group_small == "Weapons" | group_small == "Vehicular", "Controlled", "Uncontrolled")) %>% 
+  mutate(Year = as.numeric(substring(`Ship Date`, 1, 4)),
+         Cost = `Acquisition Value` * Quantity,
+         Cost = ifelse(is.na(Cost), 0, Cost)) %>%
+  group_by(Year, Controlled) %>%
+  summarize(total_cost = sum(Cost)/1000000) %>%
+  ggplot(., aes(x = Year, y = total_cost, linetype = Controlled)) +
   scale_x_continuous(limits = c(1990, 2018),
                      breaks = seq(1990, 2018, 2)) +
-  geom_line(size = 1)
+  geom_line(size = 1) +
+  labs(y = "Total Cost ($M)", x = "\nYear") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    legend.key.width = unit(1.5, "cm"),
+    legend.position = "bottom",
+    legend.title.align = 0.5,
+    legend.justification = "center",
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black")
+  )
+dev.off()
 
 disp %>%
   filter(group_small != "Unavailable") %>%
   na.omit() %>%
   group_by(group_small) %>%
+  mutate(cost = `Acquisition Value` * Quantity) %>% 
   summarize(
-    `Expenditure ($US)` = sum(`Acquisition Value`),
-    Quantity = sum(Quantity)
+    Cost = sum(cost),
+    Value = sum(`Acquisition Value`),
+    Quantity = sum(Quantity),
   ) %>%
   ungroup() %>%
   mutate(
-    `Expenditure (%)` = 100 * round(`Expenditure ($US)` / sum(`Expenditure ($US)`), 3),
+    `Cost (%)` = 100 * round(Cost / sum(Cost), 3),
+    `Value (%)` = 100 * round(Value / sum(Value), 3),
     `Quantity (%)` = 100 * round(Quantity / sum(Quantity), 3)
   ) %>%
-  arrange(desc(`Expenditure ($US)`)) %>%
-  kable()
+  arrange(desc(Cost)) %>%
+  kable("latex", booktabs = T)
 
-# Crime rates
-ucr %>%
-  group_by(year) %>%
+pdf('./writing/figures/disp_density.pdf')
+disp %>%
+  filter(group_small != "Unavailable") %>%
   na.omit() %>%
-  summarise(violent_crime = sum(violent_crime)) %>%
-  ggplot(., aes(x = year, y = violent_crime, group = 1)) +
-  geom_line(size = 1) +
-  labs(y = "Violent Crimes", x = "Year")
+  group_by(group_small) %>%
+  mutate(cost = `Acquisition Value` * Quantity,
+         cost = cost / 1000000) %>% 
+  filter(quantile(cost, 0.95) < cost) %>% 
+  ggplot(., aes(x = cost, y=..scaled..)) + 
+  geom_density() +
+  labs(x = "Total Cost ($M)", 
+       y = "Scaled Density")
+dev.off()
 
 # Crime rates table
 ucr %>%
   group_by(year) %>%
   na.omit() %>%
   summarise(violent_crime = sum(violent_crime)) %>%
-  ungroup() %>% 
+  ungroup() %>%
   arrange(year) %>%
   mutate(
     violent_crime_lag = lag(violent_crime),
     violent_crime_change = 100.0 * round((violent_crime - violent_crime_lag) / violent_crime, 3)
-  ) %>% 
-  dplyr::select(year, violent_crime, violent_crime_change) %>% 
-  rename(Year = year, 
-         `Violent Crime` = violent_crime, 
-         `Violent Crime (% Change)` = violent_crime_change) %>% 
-  kable()
+  ) %>%
+  dplyr::select(year, violent_crime, violent_crime_change) %>%
+  rename(
+    Year = year,
+    `Violent Crime` = violent_crime,
+    `Change (%)` = violent_crime_change
+  ) %>%
+  kable("latex", booktabs = T)
+

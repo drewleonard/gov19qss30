@@ -13,44 +13,65 @@ merged <- read_csv('./data/analysis_ready.csv')
 
 # Baseline Delehanty et al. (2017) models
 
-# Controlled spending, controlling for noncontrolled spending
-fit1 <- MASS::glm.nb(
-  fatalities ~ controlled + noncontrolled + violent_crime + median_income_household + population_black + population,
+# Fit 1: Controlled
+fit1 <- glm.nb(
+  fatalities ~ controlled + noncontrolled + violent_crime + median_income_household + population + population_black,
   data = merged
 )
 summary(fit1)
-ep1 <- effect_plot(
+
+# Fit 1
+# Effect plot
+pdf('./writing/figures/fit1_effects.pdf')
+effect_plot(
   fit1,
   pred = controlled,
   interval = TRUE,
-  x.label = "Controlled Spending",
-  y.label = "Fatalities"
+  x.label = "Controlled Item Expenditures (Logged)",
+  y.label = "Expected Police Killings"
 )
+dev.off()
 
-# Total
-fit2 <- MASS::glm.nb(
-  fatalities ~ total + violent_crime + median_income_household + population_black + population,
+# Fit 2: total
+fit2 <- glm.nb(
+  fatalities ~ total + violent_crime + median_income_household + population + population_black,
   data = merged
 )
 summary(fit2)
 
 # Plotting and exporting models
 coef_names <- c(
-  "Expenditures (Controlled)" = "controlled",
-  "Expenditures (Non-Controlled)" = "noncontrolled",
-  "Expenditures (Total)" = "total",
-  "Violent Crime" = "violent_crime",
-  "Median Income" = "median_income_household",
-  "Population Black" = "population_black"
+  "Controlled Items" = "controlled",
+  "Non-Controlled Items" = "noncontrolled",
+  "All Items" = "total"
 )
-plot_summs(fit1, fit2, scale = TRUE, coefs = coef_names, ci_level = 0.90)
+pdf('./writing/figures/fit1_fit2_effects.pdf')
+plot_summs(fit1, fit2, scale = TRUE, coefs = coef_names, ci_level = 0.95, model.names = c("Controlled Items", "All Items"), legend.title = "Regression Model", colors = c("blue", "red"), inner_ci_level = 0.90)
+dev.off()
 
 # Pearson's R correlation between controlled and non-controlled items
 cor(merged$controlled, merged$noncontrolled, method = "pearson")
 
+# Stargazing
+stargazer(fit1, 
+          fit2, 
+          no.space = TRUE, 
+          star.cutoffs = c(0.05, 0.01, 0.001),
+          column.labels = c("Controlled Items", "All Items"))
+
 # Interaction plot
-fit3 <- MASS::glm.nb(
-  fatalities ~ controlled * noncontrolled + violent_crime + median_income_household + population_black + population,
+fit3 <- glm.nb(
+  fatalities ~ controlled * noncontrolled + violent_crime + median_income_household + population + population_black,
   data = merged
 )
-interact_plot(fit3, pred = controlled, modx = noncontrolled, interval = TRUE)
+
+pdf('./writing/figures/fit3_effects.pdf')
+interact_plot(fit3, 
+              pred = controlled, 
+              modx = noncontrolled, 
+              interval = TRUE, 
+              x.label = "Controlled Item Expenditures (Logged)", 
+              y.label = "Expected Police Killings", 
+              legend.main = "Non-Controlled Item\nExpenditures (Logged)", 
+              int.width = 0.90)
+dev.off()
